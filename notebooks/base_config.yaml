@@ -1,0 +1,452 @@
+trainer:
+  _target_: lightning.Trainer
+  max_steps: 10000
+  accelerator: auto
+  devices: 1
+  num_nodes: 1
+  default_root_dir: ${run_dir}/snapshots/${project_name}/${run_name}/
+  check_val_every_n_epoch: null
+  val_check_interval: 1000
+  num_sanity_val_steps: 0
+  accumulate_grad_batches: 1
+  log_every_n_steps: 10
+  callbacks:
+  - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${run_dir}/snapshots/${project_name}/${run_name}/
+    auto_insert_metric_name: false
+    filename: step_{step}
+    save_top_k: -1
+    every_n_train_steps: 1000
+    every_n_epochs: null
+    save_last: true
+  - _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: step
+logger:
+  _target_: lightning.pytorch.loggers.CSVLogger
+  save_dir: ${run_dir}/logs/${project_name}/
+  name: ${run_name}
+  version: ''
+model:
+  _target_: fieldspacenn.src.models.mg_hyperprior_autoencoder.pl_mg_hyperprior_model.LightningMGHyperpriorAutoEncoderModel
+  stage: pretrain
+  freeze_analysis_encoder: false
+  freeze_synthesis_decoder: false
+  mode: encode_decode
+  max_batchsize: -1
+  weight_decay: 0
+  lr_groups:
+    default:
+      lr: 0.0005
+      warmup: 0
+    attention:
+      matches:
+      - FieldSpaceAttentionModule
+      - TransformerBlock
+      - GridSelfAttention
+      lr: 0.0005
+      warmup: 500
+    entropy:
+      matches:
+      - EntropyBottleneck
+      - GaussianConditional
+      - FieldSpaceEntropyBottleneckAdapter
+      - FieldSpaceGaussianConditionalAdapter
+      lr: 0.0001
+      warmup: 500
+  loss_config:
+    lmbda: 1.0
+    bpp_weight: 1.0
+    kl_weight: 1.0e-10
+    aux_weight: 1.0e-06
+    rate_normalization: spatiotemporal_cells
+    original_bits_per_value: 32
+    reconstruction_loss_config:
+      zooms:
+        5:
+          MSE_loss: 1
+        7:
+          MSE_loss: 1
+        9:
+          MSE_loss: 1
+  model:
+    _target_: fieldspacenn.src.models.mg_hyperprior_autoencoder.mg_hyperprior_autoencoder.MGHyperpriorFieldSpaceAutoEncoder
+    mgrids:
+      _target_: fieldspacenn.src.modules.grids.grid_utils.healpix_grid_to_mgrid
+      zoom_max: 9
+    in_zooms:
+    - 9
+    - 7
+    - 5
+    in_features: 1
+    out_features: 1
+    latent_features: 1
+    hyperlatent_features: 1
+    sample_posterior: false
+    detach_hyper_analysis_input: true
+    entropy_model: compressai
+    scale_min: 1.0e-09
+    use_ste_quantization: false
+    n_head_channels: 32
+    use_mask: false
+    pretrain_latent_quantization: noise
+    passthrough_zooms:
+    - 5
+    n_groups_variables:
+    - 1
+    n_groups_depths:
+    - 1
+    layer_confs_emb:
+      aggregation: shift_scale
+    analysis_block_configs:
+      att_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 5
+        - 7
+        - 9
+        kv_zooms:
+        - 5
+        - 7
+        - 9
+        target_zooms:
+        - 7
+        - 9
+        token_zoom: 2
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 2
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+      down_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_layer.FieldSpaceLayerConfig
+        in_zooms:
+        - 7
+        - 9
+        target_zooms:
+        - 7
+        target_features: 1
+        field_zoom: 7
+        out_zooms:
+        - 5
+        - 7
+        with_nh: true
+        type: mlp
+      att_1:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 5
+        - 7
+        kv_zooms:
+        - 5
+        - 7
+        target_zooms:
+        - 7
+        token_zoom: 2
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 2
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+    synthesis_block_configs:
+      att_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 5
+        - 7
+        kv_zooms:
+        - 5
+        - 7
+        target_zooms:
+        - 7
+        token_zoom: 2
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 2
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+      up_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_layer.FieldSpaceLayerConfig
+        in_zooms:
+        - 7
+        target_zooms:
+        - 9
+        target_features: 1
+        field_zoom: 4
+        out_zooms:
+        - 5
+        - 7
+        - 9
+        with_nh: true
+        type: mlp
+      att_1:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 5
+        - 7
+        - 9
+        kv_zooms:
+        - 5
+        - 7
+        - 9
+        target_zooms:
+        - 7
+        - 9
+        token_zoom: 2
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 2
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+    hyper_analysis_block_configs:
+      hyper_att_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 7
+        kv_zooms:
+        - 7
+        token_zoom: 4
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 4
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+      hyper_att_1:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 7
+        kv_zooms:
+        - 7
+        token_zoom: 4
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 4
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+    hyper_synthesis_block_configs:
+      hyper_att_0:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 7
+        kv_zooms:
+        - 7
+        token_zoom: 4
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 4
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+      hyper_att_1:
+        _target_: fieldspacenn.src.modules.field_space.field_space_attention.FieldSpaceAttentionConfig
+        separate_mlp_norm: true
+        q_zooms:
+        - 7
+        kv_zooms:
+        - 7
+        token_zoom: 4
+        att_dim: 256
+        token_len_depth:
+        - 1
+        token_len_time: 1
+        token_overlap_space: true
+        token_overlap_time: false
+        token_overlap_depth: false
+        token_overlap_mlp_time: false
+        token_overlap_mlp_depth: false
+        rank_depth:
+        - null
+        seq_len_zoom: -1
+        seq_len_time: -1
+        seq_len_depth: -1
+        with_var_att: false
+        update: shift_scale
+        embed_confs:
+          embed_names:
+          - MGEmbedder
+          input_zoom: 4
+          embed_confs:
+            ${embedding}
+          embed_mode: sum
+mgrids:
+  _target_: fieldspacenn.src.modules.grids.grid_utils.healpix_grid_to_mgrid
+  zoom_max: 9
+dataloader:
+  dataset:
+    _target_: fieldspacenn.src.data.datasets_healpix.HealPixLoader
+    norm_dict: null
+    p_dropout: 0
+    random_p: false
+    p_dropout_all: 0
+    n_sample_variables: -1
+    output_binary_mask: true
+    apply_diff: true
+    mask_ts_mode: zero
+    sampling_zooms:
+      5:
+        n_past_ts: 0
+        n_future_ts: 0
+        zoom_patch_sample: -1
+      7:
+        n_past_ts: 0
+        n_future_ts: 0
+        zoom_patch_sample: -1
+      9:
+        n_past_ts: 0
+        n_future_ts: 0
+        zoom_patch_sample: -1
+    output_max_zoom_only: false
+  datamodule:
+    _target_: fieldspacenn.src.data.pl_data_module.DataModule
+    batch_size: 1
+    num_workers: 4
+    use_costum_ddp_sampler: false
+data_variables:
+  # The training notebook replaces this mapping from VARIABLES. Keep 2D fields
+  # at one selected level. An optional 3D group may retain all levels or an
+  # equal-length level_indices subset for every variable in that group.
+  2D:
+    tas: {}
+embedding:
+  MGEmbedder:
+    shared: false
+    in_channels: 2
+    embed_dim: 64
+    n_variables: 1
+    init_method: spherical_harmonics
+ckpt_path: null
+ckpt_path_pretrained: null
+project_name: mg_hyperprior_autoencoder_hpx9_cycle4
+run_name: tas
+run_dir: ./

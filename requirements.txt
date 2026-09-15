@@ -1,0 +1,20 @@
+# FieldSpaceNN development branch used by the notebook API and base configuration.
+-e git+https://github.com/FREVA-CLINT/FieldSpaceNN.git@dev-jm#egg=fieldspacenn
+
+# Direct notebook/runtime dependencies. Transitive packages are resolved by pip.
+compressai==1.2.8
+dask==2026.8.0
+healpy==1.18.1
+hydra-core==1.3.2
+ipykernel==7.3.0
+lightning==2.4.0
+matplotlib==3.11.1
+netCDF4==1.7.4
+numpy==1.26.4
+pandas==3.0.5
+s3fs==2026.7.0
+scipy==1.15.3
+torch==2.4.0
+tqdm==4.70.0
+xarray==2026.7.0
+zarr==3.1.5
